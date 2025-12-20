@@ -1,6 +1,7 @@
 
 
-import pyromod  # ✅ Patch Client for .ask()
+import pyromod
+import pyromod.listen
 import asyncio
 import logging
 import datetime
