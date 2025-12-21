@@ -3,6 +3,7 @@
 import os
 import asyncio
 import random
+import time
 import pyrogram
 from pyrogram import Client, filters, enums
 from pyrogram.errors import FloodWait, UserIsBlocked, InputUserDeactivated, UserAlreadyParticipant, InviteHashExpired, UsernameNotOccupied
@@ -35,9 +36,9 @@ async def downstatus(client, statusfile, message, chat):
     while not os.path.exists(statusfile):
         await asyncio.sleep(3)
     while os.path.exists(statusfile):
-        with open(statusfile, "r") as downread:
-            txt = downread.read()
         try:
+            with open(statusfile, "r") as downread:
+                txt = downread.read()
             await client.edit_message_text(chat, message.id, f"Downloaded: {txt}")
             await asyncio.sleep(10)
         except:
@@ -51,9 +52,9 @@ async def upstatus(client, statusfile, message, chat):
     while not os.path.exists(statusfile):
         await asyncio.sleep(3)
     while os.path.exists(statusfile):
-        with open(statusfile, "r") as upread:
-            txt = upread.read()
         try:
+            with open(statusfile, "r") as upread:
+                txt = upread.read()
             await client.edit_message_text(chat, message.id, f"Uploaded: {txt}")
             await asyncio.sleep(10)
         except:
@@ -64,8 +65,21 @@ async def upstatus(client, statusfile, message, chat):
 # -------------------
 
 def progress(current, total, message, type):
-    with open(f'{message.id}{type}status.txt', "w") as fileup:
-        fileup.write(f"{current * 100 / total:.1f}%")
+    # Initialize cache if not exists
+    if not hasattr(progress, "cache"):
+        progress.cache = {}
+    
+    now = time.time()
+    last_time = progress.cache.get(f"{message.id}{type}", 0)
+    
+    # Update only every 2 seconds or if completed
+    if (now - last_time) > 2 or current == total:
+        try:
+            with open(f'{message.id}{type}status.txt', "w") as fileup:
+                fileup.write(f"{current * 100 / total:.1f}%")
+            progress.cache[f"{message.id}{type}"] = now
+        except:
+            pass
 
 # -------------------
 # Start command
@@ -260,7 +274,8 @@ async def handle_private(client: Client, acc, message: Message, chatid: int, msg
     asyncio.create_task(downstatus(client, f'{message.id}downstatus.txt', smsg, chat))
     try:
         file = await acc.download_media(msg, progress=progress, progress_args=[message, "down"])
-        os.remove(f'{message.id}downstatus.txt')
+        if os.path.exists(f'{message.id}downstatus.txt'):
+            os.remove(f'{message.id}downstatus.txt')
     except Exception as e:
         logger.error(f"Error downloading media: {e}")
         if ERROR_MESSAGE:
@@ -285,7 +300,8 @@ async def handle_private(client: Client, acc, message: Message, chatid: int, msg
             await client.send_document(chat, file, thumb=ph_path, caption=caption, reply_to_message_id=message.id,
                                        parse_mode=enums.ParseMode.HTML, progress=progress,
                                        progress_args=[message, "up"])
-            if ph_path: os.remove(ph_path)
+            if ph_path and os.path.exists(ph_path):
+                os.remove(ph_path)
 
         elif "Video" == msg_type:
             try:
@@ -296,7 +312,8 @@ async def handle_private(client: Client, acc, message: Message, chatid: int, msg
                                     height=msg.video.height, thumb=ph_path, caption=caption,
                                     reply_to_message_id=message.id, parse_mode=enums.ParseMode.HTML,
                                     progress=progress, progress_args=[message, "up"])
-            if ph_path: os.remove(ph_path)
+            if ph_path and os.path.exists(ph_path):
+                os.remove(ph_path)
 
         elif "Animation" == msg_type:
             await client.send_animation(chat, file, reply_to_message_id=message.id, parse_mode=enums.ParseMode.HTML)
@@ -317,7 +334,8 @@ async def handle_private(client: Client, acc, message: Message, chatid: int, msg
             await client.send_audio(chat, file, thumb=ph_path, caption=caption, reply_to_message_id=message.id,
                                     parse_mode=enums.ParseMode.HTML, progress=progress,
                                     progress_args=[message, "up"])
-            if ph_path: os.remove(ph_path)
+            if ph_path and os.path.exists(ph_path):
+                os.remove(ph_path)
 
         elif "Photo" == msg_type:
             await client.send_photo(chat, file, caption=caption, reply_to_message_id=message.id,
@@ -330,6 +348,7 @@ async def handle_private(client: Client, acc, message: Message, chatid: int, msg
 
     if os.path.exists(f'{message.id}upstatus.txt'):
         os.remove(f'{message.id}upstatus.txt')
+    if file and os.path.exists(file):
         os.remove(file)
 
     await client.delete_messages(message.chat.id, [smsg.id])
