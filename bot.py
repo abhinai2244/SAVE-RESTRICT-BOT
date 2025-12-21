@@ -1,9 +1,11 @@
 import asyncio
 import datetime
+import sys
+import platform
 from datetime import timezone, timedelta
 import aiohttp
 from motor.motor_asyncio import AsyncIOMotorClient
-from pyrogram import Client, filters
+from pyrogram import Client, filters, __version__ as pyrogram_version
 from pyrogram.types import Message
 from config import API_ID, API_HASH, BOT_TOKEN, LOG_CHANNEL, KEEP_ALIVE_URL, DB_URI, DB_NAME
 from logger import LOGGER
@@ -65,19 +67,26 @@ class Bot(Client):
 
         # Bot startup log
         now = datetime.datetime.now(IST)
+        py_ver = f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}"
+        
         text = (
             f"**__🤖 Bot Deployed / Restarted ♻️__**\n"
             f"**__- @{me.username}__**\n\n"
             f"**__📅 Date:** {now.strftime('%d-%b-%Y')}__\n"
             f"**__🕒 Time:** {now.strftime('%I:%M %p')}__\n"
+            f"**🐍 Python:** `{py_ver}`\n"
+            f"**🔥 Pyrogram:** `{pyrogram_version}`\n"
             f"**__@RexBots_Official__**"
         )
+
         try:
             await self.send_message(LOG_CHANNEL, text)
         except Exception as e:
             logger.error(f"Log send failed: {e}")
 
         logger.info(f"✅ Bot Powered By @{me.username}")
+        logger.info(f"🐍 Python Version: {py_ver}")
+        logger.info(f"🔥 Pyrogram Version: {pyrogram_version}")
 
     async def stop(self, *args):
         me = await self.get_me()
