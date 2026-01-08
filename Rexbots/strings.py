@@ -25,7 +25,19 @@ Logout from the current session.
 
 <blockquote><b>📦 /batch</b>
 Bulk save messages from a channel (Public/Private).
-<i>Usage: /batch</i></blockquote>
+
+<b>📋 Usage Methods:</b>
+• <code>/batch https://t.me/c/123456789/1-100</code> - Direct link
+• Reply to a link with <code>/batch</code> - Use replied link
+• <code>/batch</code> - Interactive mode (asks for start & end links)
+
+<b>🔄 Interactive Mode:</b>
+1. Send <code>/batch</code>
+2. Bot asks for start link (first message)
+3. Send end link (last message)
+4. Bot processes all messages in range
+
+<i>Example: /batch https://t.me/c/123456789/1-50</i></blockquote>
 
 <blockquote><b>🛑 /cancel</b>
 Cancel any ongoing batch process.
@@ -130,7 +142,7 @@ COMMANDS_TXT = """<b>📜 Available Commands</b>
     <blockquote><b>👤 User Commands:</b>
     <b>/start</b> - <i>Start the bot</i>
     <b>/help</b> - <i>Get help information</i>
-    <b>/batch</b> - <i>Save in bulk</i>
+    <b>/batch</b> - <i>Bulk save messages (direct link, reply, or interactive)</i>
     <b>/login</b> - <i>Login Account</i>
     <b>/logout</b> - <i>Logout Account</i>
     <b>/set_caption</b> - <i>Set a custom caption</i>
