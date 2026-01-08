@@ -848,7 +848,10 @@ async def start_batch_from_link(client, message, link, from_id, to_id):
 
 @Client.on_message(filters.private & filters.text & ~filters.regex("^/"))
 async def save(client: Client, message: Message):
-    if "https://t.me/" in message.text:
+    try:
+        logger.info(f"Received message from {message.from_user.id}: {message.text}")
+        if "https://t.me/" in message.text:
+            await message.reply("🔄 **Processing your link...**", parse_mode=enums.ParseMode.HTML)
         # Check if batch is already running
         if batch_temp.IS_BATCH.get(message.from_user.id) == False:
             return await message.reply_text(
@@ -972,6 +975,10 @@ async def save(client: Client, message: Message):
             await start_msg.edit("**__✅ Batch Processing Completed Successfully!__**", parse_mode=enums.ParseMode.HTML)
         else:
             await start_msg.edit("**__ℹ️ Batch Processing Ended__**", parse_mode=enums.ParseMode.HTML)
+    except Exception as e:
+        logger.error(f"Error in save function: {e}")
+        if ERROR_MESSAGE:
+            await client.send_message(message.chat.id, f"Error: {e}", reply_to_message_id=message.id)
 
 # -------------------
 # Handle private content
