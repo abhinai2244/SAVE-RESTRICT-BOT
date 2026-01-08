@@ -71,6 +71,17 @@ class batch_temp(object):
     IS_BATCH = {}
 
 # -------------------
+# Batch conversation state management
+# -------------------
+BATCH_STATE = {
+    "WAITING_START_LINK": "waiting_start_link",
+    "WAITING_END_LINK": "waiting_end_link",
+    "IDLE": "idle"
+}
+
+batch_conversation_state = {}
+
+# -------------------
 # Supported Telegram Reactions
 # -------------------
 
@@ -307,7 +318,7 @@ async def send_help(client: Client, message: Message):
 
 @Client.on_message(filters.private & filters.command(["batch"]))
 async def batch_command(client: Client, message: Message):
-    """Handle /batch command to start batch processing"""
+    """Handle /batch command to start interactive batch processing"""
     logger.info(f"Batch command received from user {message.from_user.id}")
     
     if not await db.is_user_exist(message.from_user.id):
@@ -317,7 +328,7 @@ async def batch_command(client: Client, message: Message):
     user_data = await db.get_session(message.from_user.id)
     if user_data is None:
         await message.reply_text(
-            "**__🚪 Please /login First To Use Batch Feature.__**",
+            "**🚪 Please /login First To Use Batch Feature.**",
             parse_mode=enums.ParseMode.HTML
         )
         return
@@ -325,20 +336,33 @@ async def batch_command(client: Client, message: Message):
     # Check if batch is already running
     if batch_temp.IS_BATCH.get(message.from_user.id) == False:
         await message.reply_text(
-            "**__⚠️ One Batch Task Is Already Processing. Wait For Complete It.\nIf You Want To Cancel This Task Then Use - /cancel__**",
+            "**⚠️ One Batch Task Is Already Processing. Wait For Complete It.\nIf You Want To Cancel This Task Then Use - /cancel**",
             parse_mode=enums.ParseMode.HTML
         )
         return
     
-    # Send instructions
+    # Check if user is already in batch conversation
+    if message.from_user.id in batch_conversation_state:
+        await message.reply_text(
+            "**⚠️ You already have an active batch conversation.\n"
+            "Send /cancel to cancel and start fresh.**",
+            parse_mode=enums.ParseMode.HTML
+        )
+        return
+    
+    # Set conversation state to waiting for start link
+    batch_conversation_state[message.from_user.id] = {"state": BATCH_STATE["WAITING_START_LINK"]}
+    
+    # Send interactive batch instructions
     await message.reply_text(
-        "**__📦 Batch Processing Ready!__**\n\n"
-        "**Send me a Telegram link with message range:**\n"
-        "• Public: `https://t.me/username/1-10`\n"
-        "• Private: `https://t.me/c/channel_id/1-10`\n"
-        "• Batch: `https://t.me/b/username/1-10`\n\n"
-        "**Example:** `https://t.me/c/123456789/1-100`\n"
-        "This will download messages 1 to 100 from the channel.",
+        "**📦 Interactive Batch Mode Started!**\n\n"
+        "**Step 1/2:** Send the START link\n"
+        "(First message you want to download)\n\n"
+        "Example:\n"
+        "• Public: `https://t.me/username/10`\n"
+        "• Private: `https://t.me/c/123456789/10`\n"
+        "• Batch: `https://t.me/b/username/10`\n\n"
+        "Send /cancel to cancel the batch process.",
         parse_mode=enums.ParseMode.HTML
     )
 
@@ -349,11 +373,242 @@ async def batch_command(client: Client, message: Message):
 @Client.on_message(filters.private & filters.command(["cancel"]))
 async def send_cancel(client: Client, message: Message):
     logger.info(f"Cancel command received from user {message.from_user.id}")
+    
+    # Also cancel batch conversation state
+    if message.from_user.id in batch_conversation_state:
+        del batch_conversation_state[message.from_user.id]
+    
     if batch_temp.IS_BATCH.get(message.from_user.id) == False:
         batch_temp.IS_BATCH[message.from_user.id] = True
         await message.reply_text("❌ **Batch Process Cancelled Successfully.**", parse_mode=enums.ParseMode.HTML)
     else:
         await message.reply_text("**⚠️ No Active Batch Process To Cancel.**", parse_mode=enums.ParseMode.HTML)
+
+# -------------------
+# Interactive Batch Conversation Handler
+# -------------------
+
+def extract_message_ids(link: str):
+    """Extract message ID(s) from a Telegram link"""
+    if "https://t.me/" in link:
+        datas = link.split("/")
+        temp = datas[-1].replace("?single", "")
+        
+        if "-" in temp:
+            parts = temp.split("-")
+            from_id = int(parts[0].strip())
+            to_id = int(parts[1].strip())
+            return from_id, to_id
+        else:
+            msg_id = int(temp.strip())
+            return msg_id, msg_id
+    return None, None
+
+def get_channel_info(link: str):
+    """Get channel username or ID from link"""
+    if "https://t.me/c/" in link:
+        datas = link.split("/")
+        return "private", datas[4]
+    elif "https://t.me/b/" in link:
+        datas = link.split("/")
+        return "batch", datas[4]
+    elif "https://t.me/" in link:
+        datas = link.split("/")
+        return "public", datas[3]
+    return None, None
+
+@Client.on_message(filters.private & filters.text & ~filters.regex("^/"))
+async def batch_conversation_handler(client: Client, message: Message):
+    """Handle interactive batch conversation"""
+    user_id = message.from_user.id
+    
+    # Check if user is in batch conversation state
+    if user_id not in batch_conversation_state:
+        return
+    
+    state = batch_conversation_state[user_id]
+    link = message.text.strip()
+    
+    if "https://t.me/" not in link:
+        await message.reply_text(
+            "**⚠️ Please send a valid Telegram link.**\n"
+            "Example: `https://t.me/c/123456789/10`",
+            parse_mode=enums.ParseMode.HTML
+        )
+        return
+    
+    if state == BATCH_STATE["WAITING_START_LINK"]:
+        # Store start link and ask for end link
+        start_id, _ = extract_message_ids(link)
+        channel_type, channel_id = get_channel_info(link)
+        
+        if start_id is None:
+            await message.reply_text(
+                "**⚠️ Could not extract message ID from link.**\n"
+                "Please send a valid Telegram link.",
+                parse_mode=enums.ParseMode.HTML
+            )
+            return
+        
+        # Store conversation state
+        batch_conversation_state[user_id] = {
+            "state": BATCH_STATE["WAITING_END_LINK"],
+            "start_link": link,
+            "start_id": start_id,
+            "channel_type": channel_type,
+            "channel_id": channel_id
+        }
+        
+        await message.reply_text(
+            f"**✅ Start Link Received!**\n\n"
+            f"**📎 Start Message ID:** `{start_id}`\n\n"
+            f"**Now send the END link** (last message you want to download):\n"
+            f"Example: `https://t.me/c/123456789/100`\n\n"
+            f"Send /cancel to cancel the batch process.",
+            parse_mode=enums.ParseMode.HTML
+        )
+        
+    elif state["state"] == BATCH_STATE["WAITING_END_LINK"]:
+        # Process both links and start batch
+        end_id, _ = extract_message_ids(link)
+        
+        if end_id is None:
+            await message.reply_text(
+                "**⚠️ Could not extract message ID from link.**\n"
+                "Please send a valid Telegram link.",
+                parse_mode=enums.ParseMode.HTML
+            )
+            return
+        
+        start_id = state["start_id"]
+        
+        # Validate range
+        if end_id < start_id:
+            await message.reply_text(
+                f"**⚠️ End ID ({end_id}) is less than Start ID ({start_id})**\n"
+                "Please send a valid end link.",
+                parse_mode=enums.ParseMode.HTML
+            )
+            return
+        
+        # Clear conversation state and start batch
+        del batch_conversation_state[user_id]
+        
+        # Start the batch process
+        await start_batch_process(
+            client, message, 
+            state["channel_type"], 
+            state["channel_id"], 
+            start_id, 
+            end_id
+        )
+
+async def start_batch_process(client, message, channel_type, channel_id, from_id, to_id):
+    """Start the actual batch processing"""
+    user_id = message.from_user.id
+    
+    # Check if batch is already running
+    if batch_temp.IS_BATCH.get(user_id) == False:
+        await message.reply_text(
+            "**⚠️ One Task Is Already Processing. Wait For Complete It.\nIf You Want To Cancel This Task Then Use - /cancel**",
+            parse_mode=enums.ParseMode.HTML
+        )
+        return
+    
+    # Check login
+    user_data = await db.get_session(user_id)
+    if user_data is None:
+        await message.reply_text(
+            "**🚪 For Downloading Restricted Content You Have To /login First.**",
+            parse_mode=enums.ParseMode.HTML
+        )
+        return
+    
+    # Initialize batch
+    batch_temp.IS_BATCH[user_id] = False
+    total_msgs = to_id - from_id + 1
+    
+    # Send start confirmation
+    start_msg = await message.reply_text(
+        f"**📦 Interactive Batch Processing Started!**\n\n"
+        f"**📋 Range:** {from_id} - {to_id} ({total_msgs} messages)\n"
+        f"**🔄 Status:** Processing...",
+        parse_mode=enums.ParseMode.HTML
+    )
+    
+    # Connect to user client
+    try:
+        acc = Client("saverestricted", session_string=user_data, api_hash=API_HASH, api_id=API_ID, in_memory=True)
+        await acc.connect()
+    except (AuthKeyUnregistered, UserDeactivated, UserDeactivatedBan) as e:
+        batch_temp.IS_BATCH[user_id] = True
+        await db.set_session(user_id, None)
+        await message.reply(f"**🚪 Your Login Session Invalid/Expired. Please /login again.**\nError: {e}")
+        await start_msg.edit("**❌ Batch Stopped: Session Expired**", parse_mode=enums.ParseMode.HTML)
+        return
+    except Exception:
+        batch_temp.IS_BATCH[user_id] = True
+        await message.reply("**🚪 Your Login Session Error. So /logout First Then Login Again By - /login**")
+        await start_msg.edit("**❌ Batch Stopped: Session Error**", parse_mode=enums.ParseMode.HTML)
+        return
+    
+    # Process each message
+    success_count = 0
+    fail_count = 0
+    
+    for msgid in range(from_id, to_id + 1):
+        if batch_temp.IS_BATCH.get(user_id):
+            break
+        
+        # Update progress
+        current_num = msgid - from_id + 1
+        percentage = (current_num / total_msgs) * 100 if total_msgs > 0 else 0
+        
+        try:
+            await start_msg.edit(
+                f"**📦 Batch Processing**\n"
+                f"**📋 Progress:** {current_num}/{total_msgs} ({percentage:.1f}%)\n"
+                f"**✅ Success:** {success_count} | **❌ Failed:** {fail_count}\n"
+                f"**🔄 Processing ID:** {msgid}",
+                parse_mode=enums.ParseMode.HTML
+            )
+        except:
+            pass
+        
+        # Handle content based on channel type
+        try:
+            if channel_type == "private":
+                chatid = int("-100" + channel_id)
+                await handle_private(client, acc, message, chatid, msgid)
+            elif channel_type == "batch":
+                await handle_private(client, acc, message, channel_id, msgid)
+            else:  # public
+                await handle_private(client, acc, message, channel_id, msgid)
+            success_count += 1
+        except Exception as e:
+            logger.error(f"Error processing message {msgid}: {e}")
+            fail_count += 1
+        
+        await asyncio.sleep(2)
+    
+    # Cleanup
+    batch_temp.IS_BATCH[user_id] = True
+    
+    try:
+        await acc.disconnect()
+    except:
+        pass
+    
+    # Send completion message
+    await start_msg.edit(
+        f"**✅ Batch Processing Completed!**\n\n"
+        f"**📊 Summary:**\n"
+        f"• **Total Messages:** {total_msgs}\n"
+        f"• **Success:** {success_count}\n"
+        f"• **Failed:** {fail_count}\n\n"
+        f"**Use /batch to start a new batch process.**",
+        parse_mode=enums.ParseMode.HTML
+    )
 
 # -------------------
 # Handle incoming messages
