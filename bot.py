@@ -2,10 +2,11 @@
 # Don't Remove Credit
 # Telegram Channel @RexBots_Official
 
+import os
 import asyncio
+import threading
 import datetime
 import sys
-import platform
 from datetime import timezone, timedelta
 import aiohttp
 from pyrogram import Client, filters, __version__ as pyrogram_version
@@ -76,10 +77,33 @@ class Bot(Client):
         logger.info(f"Bot @{me.username} Stopped - Bye")
 
 
-BotInstance = Bot()
+def run_flask_app():
+    """Run Flask app in a separate thread"""
+    from app import app
+    port = int(os.environ.get('PORT', 10000))
+    logger.info(f"Starting Flask web server on port {port}")
+    app.run(host='0.0.0.0', port=port, debug=False, use_reloader=False)
 
 
-BotInstance.run()
+def main():
+    """Main entry point - runs both Flask and Telegram bot"""
+    port = int(os.environ.get('PORT', 10000))
+    
+    logger.info(f"Render Port: {port}")
+    logger.info("Starting Telegram Bot with Web Server...")
+    
+    # Start Flask in a separate thread
+    flask_thread = threading.Thread(target=run_flask_app, daemon=True)
+    flask_thread.start()
+    logger.info("Flask web server started in background")
+    
+    # Run the Telegram bot (this will block)
+    BotInstance = Bot()
+    BotInstance.run()
+    
+
+if __name__ == "__main__":
+    main()
 
 
 # Rexbots

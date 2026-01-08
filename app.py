@@ -2,12 +2,15 @@
 # Don't Remove Credit
 # Telegram Channel @RexBots_Official
 
-
-
 import os
-from flask import Flask
+import asyncio
+import threading
+from flask import Flask, jsonify
+from config import KEEP_ALIVE_URL
+
 app = Flask(__name__)
 
+# Health check endpoint for Render
 @app.route('/')
 def hello_world():
     return """
@@ -54,9 +57,9 @@ def hello_world():
       width: 100%;
       cursor: pointer;
     }
-# Rexbots
-# Don't Remove Credit
-# Telegram Channel @RexBots_Official
+ # Rexbots
+ # Don't Remove Credit
+ # Telegram Channel @RexBots_Official
 
     h1 {
       font-size: clamp(2.5rem, 8vw, 7rem);
@@ -98,14 +101,24 @@ def hello_world():
 </html>
     """
 
+# Health check endpoint for Render monitoring
+@app.route('/health')
+def health_check():
+    return jsonify({
+        "status": "healthy",
+        "service": "telegram-bot",
+        "port": os.environ.get('PORT', '10000')
+    })
+
+# Render ping endpoint (for keep-alive)
+@app.route('/ping')
+def ping():
+    return jsonify({"status": "pong"})
+
+# Run Flask in a separate thread
+def run_flask():
+    port = int(os.environ.get('PORT', 10000))
+    app.run(host='0.0.0.0', port=port, debug=False, use_reloader=False)
+
 if __name__ == "__main__":
-    app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 10000)))
-
-
-# Rexbots
-# Don't Remove Credit 
-# Telegram Channel @RexBots_Official
-
-# Rexbots
-# Don't Remove Credit
-# Telegram Channel @RexBots_Official
+    run_flask()
