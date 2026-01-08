@@ -318,7 +318,7 @@ async def send_help(client: Client, message: Message):
 
 @Client.on_message(filters.private & filters.command(["batch"]))
 async def batch_command(client: Client, message: Message):
-    """Handle /batch command to start interactive batch processing"""
+    """Handle /batch command - accepts a single link and processes all messages"""
     logger.info(f"Batch command received from user {message.from_user.id}")
     
     if not await db.is_user_exist(message.from_user.id):
@@ -341,30 +341,67 @@ async def batch_command(client: Client, message: Message):
         )
         return
     
-    # Check if user is already in batch conversation
-    if message.from_user.id in batch_conversation_state:
+    # Check if user provided a link with the command
+    if len(message.command) > 1:
+        # Link provided as argument: /batch https://t.me/c/123456/1-100
+        link = message.text.split(" ", 1)[1].strip()
+    elif message.reply_to_message:
+        # Link provided as reply
+        link = message.reply_to_message.text.strip()
+    else:
+        # No link provided - show help
         await message.reply_text(
-            "**⚠️ You already have an active batch conversation.\n"
-            "Send /cancel to cancel and start fresh.**",
+            "**📦 Simple Batch Mode**\n\n"
+            "**Usage:**\n"
+            "• `/batch https://t.me/c/123456789/1-100`\n"
+            "• Reply to a link with `/batch`\n\n"
+            "**Example:**\n"
+            "`/batch https://t.me/c/123456789/1-50`\n"
+            "This will download all 50 messages.\n\n"
+            "**Supported:**\n"
+            "• Private: `https://t.me/c/channel_id/start-end`\n"
+            "• Public: `https://t.me/username/start-end`\n"
+            "• Batch: `https://t.me/b/username/start-end`",
             parse_mode=enums.ParseMode.HTML
         )
         return
     
-    # Set conversation state to waiting for start link
-    batch_conversation_state[message.from_user.id] = {"state": BATCH_STATE["WAITING_START_LINK"]}
+    # Validate the link
+    if "https://t.me/" not in link:
+        await message.reply_text(
+            "**⚠️ Please provide a valid Telegram link.**\n\n"
+            "Example: `https://t.me/c/123456789/1-100`",
+            parse_mode=enums.ParseMode.HTML
+        )
+        return
     
-    # Send interactive batch instructions
-    await message.reply_text(
-        "**📦 Interactive Batch Mode Started!**\n\n"
-        "**Step 1/2:** Send the START link\n"
-        "(First message you want to download)\n\n"
-        "Example:\n"
-        "• Public: `https://t.me/username/10`\n"
-        "• Private: `https://t.me/c/123456789/10`\n"
-        "• Batch: `https://t.me/b/username/10`\n\n"
-        "Send /cancel to cancel the batch process.",
-        parse_mode=enums.ParseMode.HTML
-    )
+    # Extract message IDs
+    datas = link.split("/")
+    temp = datas[-1].replace("?single", "")
+    
+    if "-" not in temp:
+        # Single message, not a range
+        await message.reply_text(
+            "**⚠️ Please provide a link with message range.**\n\n"
+            "Example: `https://t.me/c/123456789/1-100`\n"
+            "This means messages 1 to 100.",
+            parse_mode=enums.ParseMode.HTML
+        )
+        return
+    
+    temp_parts = temp.split("-")
+    fromID = int(temp_parts[0].strip())
+    toID = int(temp_parts[1].strip())
+    
+    if toID < fromID:
+        await message.reply_text(
+            "**⚠️ End ID must be greater than or equal to Start ID.**",
+            parse_mode=enums.ParseMode.HTML
+        )
+        return
+    
+    # Start the batch process with the link
+    await start_batch_from_link(client, message, link, fromID, toID)
 
 # -------------------
 # Cancel command
@@ -610,6 +647,145 @@ async def start_batch_process(client, message, channel_type, channel_id, from_id
         parse_mode=enums.ParseMode.HTML
     )
 
+async def start_batch_from_link(client, message, link, from_id, to_id):
+    """Start batch processing from a single link - simplified version"""
+    user_id = message.from_user.id
+    
+    # Check if batch is already running
+    if batch_temp.IS_BATCH.get(user_id) == False:
+        await message.reply_text(
+            "**⚠️ One Task Is Already Processing. Wait For Complete It.\nIf You Want To Cancel This Task Then Use - /cancel**",
+            parse_mode=enums.ParseMode.HTML
+        )
+        return
+    
+    # Check login
+    user_data = await db.get_session(user_id)
+    if user_data is None:
+        await message.reply_text(
+            "**🚪 For Downloading Restricted Content You Have To /login First.**",
+            parse_mode=enums.ParseMode.HTML
+        )
+        return
+    
+    # Initialize batch
+    batch_temp.IS_BATCH[user_id] = False
+    total_msgs = to_id - from_id + 1
+    
+    # Determine channel type and ID from link
+    is_private = "https://t.me/c/" in link
+    is_batch = "https://t.me/b/" in link
+    
+    datas = link.split("/")
+    if is_private:
+        channel_id = datas[4]
+    elif is_batch:
+        channel_id = datas[4]
+    else:
+        channel_id = datas[3]
+    
+    # Send start confirmation
+    start_msg = await message.reply_text(
+        f"**📦 Batch Processing Started!**\n\n"
+        f"**📋 Range:** {from_id} - {to_id} ({total_msgs} messages)\n"
+        f"**🔄 Status:** Processing...",
+        parse_mode=enums.ParseMode.HTML
+    )
+    
+    # Connect to user client
+    try:
+        acc = Client("saverestricted", session_string=user_data, api_hash=API_HASH, api_id=API_ID, in_memory=True)
+        await acc.connect()
+    except (AuthKeyUnregistered, UserDeactivated, UserDeactivatedBan) as e:
+        batch_temp.IS_BATCH[user_id] = True
+        await db.set_session(user_id, None)
+        await message.reply(f"**🚪 Your Login Session Invalid/Expired. Please /login again.**\nError: {e}")
+        await start_msg.edit("**❌ Batch Stopped: Session Expired**", parse_mode=enums.ParseMode.HTML)
+        return
+    except Exception:
+        batch_temp.IS_BATCH[user_id] = True
+        await message.reply("**🚪 Your Login Session Error. So /logout First Then Login Again By - /login**")
+        await start_msg.edit("**❌ Batch Stopped: Session Error**", parse_mode=enums.ParseMode.HTML)
+        return
+    
+    # Process each message
+    success_count = 0
+    fail_count = 0
+    skipped_count = 0
+    
+    for msgid in range(from_id, to_id + 1):
+        if batch_temp.IS_BATCH.get(user_id):
+            break
+        
+        # Update progress
+        current_num = msgid - from_id + 1
+        percentage = (current_num / total_msgs) * 100 if total_msgs > 0 else 0
+        
+        try:
+            await start_msg.edit(
+                f"**📦 Batch Processing**\n"
+                f"**📋 Progress:** {current_num}/{total_msgs} ({percentage:.1f}%)\n"
+                f"**✅ Success:** {success_count} | **⏭️ Skipped:** {skipped_count} | **❌ Failed:** {fail_count}\n"
+                f"**🔄 Processing ID:** {msgid}",
+                parse_mode=enums.ParseMode.HTML
+            )
+        except:
+            pass
+        
+        # Handle content
+        try:
+            if is_private:
+                chatid = int("-100" + channel_id)
+                result = await handle_private(client, acc, message, chatid, msgid)
+                if result:
+                    success_count += 1
+                else:
+                    skipped_count += 1
+            elif is_batch:
+                result = await handle_private(client, acc, message, channel_id, msgid)
+                if result:
+                    success_count += 1
+                else:
+                    skipped_count += 1
+            else:
+                # Try public copy first
+                try:
+                    msg = await client.get_messages(channel_id, msgid)
+                    await client.copy_message(message.chat.id, msg.chat.id, msg.id, reply_to_message_id=message.id)
+                    success_count += 1
+                except:
+                    # Fallback to user client
+                    result = await handle_private(client, acc, message, channel_id, msgid)
+                    if result:
+                        success_count += 1
+                    else:
+                        skipped_count += 1
+        except Exception as e:
+            logger.error(f"Error processing message {msgid}: {e}")
+            fail_count += 1
+        
+        await asyncio.sleep(1.5)
+    
+    # Cleanup
+    batch_temp.IS_BATCH[user_id] = True
+    
+    try:
+        await acc.disconnect()
+    except:
+        pass
+    
+    # Send completion message
+    await start_msg.edit(
+        f"**✅ Batch Processing Completed!**\n\n"
+        f"**📊 Summary:**\n"
+        f"• **Total Messages:** {total_msgs}\n"
+        f"• **Success:** {success_count}\n"
+        f"• **Skipped:** {skipped_count}\n"
+        f"• **Failed:** {fail_count}\n\n"
+        f"**Use /batch again for more.**",
+        parse_mode=enums.ParseMode.HTML
+    )
+
 # -------------------
 # Handle incoming messages
 # -------------------
@@ -745,14 +921,14 @@ async def save(client: Client, message: Message):
 # Handle private content
 # -------------------
 
-async def handle_private(client: Client, acc, message: Message, chatid: int, msgid: int):
+async def handle_private(client: Client, acc, message: Message, chatid: int, msgid: int) -> bool:
     try:
         msg: Message = await acc.get_messages(chatid, msgid)
     except (AuthKeyUnregistered, UserDeactivated, UserDeactivatedBan) as e:
         batch_temp.IS_BATCH[message.from_user.id] = True
         await db.set_session(message.from_user.id, None)
         await client.send_message(message.chat.id, f"Session Token Invalid/Expired. Please /login again.\nError: {e}")
-        return
+        return False
     except Exception as e:
         # Handle PeerIdInvalid (which might come as generic Exception or RPCError)
         # We try to refresh dialogs to learn about the peer.
@@ -766,36 +942,36 @@ async def handle_private(client: Client, acc, message: Message, chatid: int, msg
             batch_temp.IS_BATCH[message.from_user.id] = True
             await db.set_session(message.from_user.id, None)
             await client.send_message(message.chat.id, f"Session Token Invalid/Expired. Please /login again.\nError: {e}")
-            return
+            return False
         except Exception as e2:
             logger.error(f"Retry failed: {e2}")
-            return
+            return False
 # Rexbots
 # Don't Remove Credit
 # Telegram Channel @RexBots_Official
 
     if msg.empty:
-        return
+        return False
 
     msg_type = get_message_type(msg)
     if not msg_type:
-        return
+        return False
 
     chat = message.chat.id
     if batch_temp.IS_BATCH.get(message.from_user.id):
-        return
+        return False
 
     if "Text" == msg_type:
         try:
             await client.send_message(chat, f"**__{msg.text}__**", entities=msg.entities, reply_to_message_id=message.id,
                                       parse_mode=enums.ParseMode.HTML)
-            return
+            return True
         except Exception as e:
             logger.error(f"Error sending text message: {e}")
             if ERROR_MESSAGE:
                 await client.send_message(message.chat.id, f"Error: {e}", reply_to_message_id=message.id,
                                           parse_mode=enums.ParseMode.HTML)
-            return
+            return False
 
     smsg = await client.send_message(
         message.chat.id,
@@ -860,7 +1036,7 @@ async def handle_private(client: Client, acc, message: Message, chatid: int, msg
                 shutil.rmtree(temp_dir)
             except:
                 pass
-        return
+        return False
 
     try:
         asyncio.create_task(upstatus(client, f'{message.id}upstatus.txt', smsg, chat))
@@ -875,7 +1051,7 @@ async def handle_private(client: Client, acc, message: Message, chatid: int, msg
                 shutil.rmtree(temp_dir)
             except:
                 pass
-        return
+        return False
 
     try:
         if "Document" == msg_type:
@@ -959,6 +1135,7 @@ async def handle_private(client: Client, acc, message: Message, chatid: int, msg
             pass
 
     await client.delete_messages(message.chat.id, [smsg.id])
+    return True
 
 #-------------------
 # Get message type
