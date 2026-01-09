@@ -268,57 +268,36 @@ def progress(current, total, message, type):
             eta = (total - current) / speed if speed > 0 else 0
             elapsed = now - progress.start_time[task_id]
 
-            # Status emoji and text based on type
+            # Status emoji based on type
             if type == "down":
                 status_emoji = "📥 DOWNLOAD"
-                status_color = "🔵"
             else:
                 status_emoji = "📤 UPLOAD"
-                status_color = "🟢"
 
             # Get animated spinner frame (cycles through different animations)
             frame_idx = int(now * 3) % len(LOADING_FRAMES)
             spinner = LOADING_FRAMES[frame_idx]
 
-            # Progress Bar - 20 blocks with gradient effect
-            filled_length = int(percentage / 5)  # 20 blocks for 100%
-            bar = '█' * filled_length + '░' * (20 - filled_length)
-
-            # Animated progress indicator with color
-            progress_anim = "░░░░░░░░░░"[int(percentage/10):] + "▓▓▓▓▓▓▓▓▓▓"[:int(percentage/10)]
-
             # Dynamic status color based on progress
             if percentage < 25:
-                status_color = "🔴"
+                status_emoji_color = "🔴"
             elif percentage < 50:
-                status_color = "🟠"
+                status_emoji_color = "🟠"
             elif percentage < 75:
-                status_color = "🟡"
+                status_emoji_color = "🟡"
             else:
-                status_color = "🟢"
-
-            status = f"{status_color} {status_emoji}"
+                status_emoji_color = "🟢"
 
             # Get progress level (0,10,20,...,100)
             progress_level = int(percentage // 10) * 10
             if progress_level > 100:
                 progress_level = 100
 
-            # Determine color based on progress
-            if percentage < 25:
-                bar_color = '#ff0000'  # red
-            elif percentage < 50:
-                bar_color = '#ffa500'  # orange
-            elif percentage < 75:
-                bar_color = '#ffff00'  # yellow
-            else:
-                bar_color = '#00ff00'  # green
-
-            # Create colorful progress bar
-            filled_length = int(percentage / 5)  # 20 blocks
-            bar = f'<span style="color:{bar_color}">' + '█' * filled_length + '</span>' + '░' * (20 - filled_length)
-
-            status_formatted = f"{spinner} {status_emoji} |{bar}| {percentage:.1f}% | {TimeFormatter(int(eta))}"
+            # Create colorful progress bar with color indicators
+            filled_length = int(percentage / 5)  # 20 blocks for 100%
+            bar = '█' * filled_length + '░' * (20 - filled_length)
+            
+            status_formatted = f"{spinner} {status_emoji_color} {status_emoji} |{bar}| {percentage:.1f}% | ETA: {TimeFormatter(int(eta))}"
 
             with open(f'{message.id}{type}status.txt', "w", encoding='utf-8') as fileup:
                 fileup.write(status_formatted)
