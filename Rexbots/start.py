@@ -564,6 +564,9 @@ async def process_single_link(client, userbot, sender, edit_id, msg_link, messag
                 chat = msg_link.split("/")[-2]
                 await copy_message_public(client, sender, chat, msg_id, message)
                 await client.delete_messages(sender, edit_id)
+        except Exception as e:
+            logger.error(f"Error in process_single_link: {e}")
+            await client.edit_message_text(sender, edit_id, f"Error: {str(e)}")
 
 async def process_and_upload_simple(client, sender, edit_id, msg, file):
     """Simple upload without progress to avoid stuck issues"""
@@ -829,9 +832,6 @@ async def handle_private(client: Client, acc, message: Message, chatid: int, msg
         except Exception as e2:
             logger.error(f"Retry failed: {e2}")
             return False
-# Rexbots
-# Don't Remove Credit
-# Telegram Channel @RexBots_Official
 
     if msg.empty:
         return False
