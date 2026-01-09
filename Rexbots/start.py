@@ -500,7 +500,7 @@ async def handle_batch_response(client: Client, message: Message):
         await user_queues[chat_id].put(message)
         return
 
-@Client.on_message(filters.private & filters.regex(r'https?://[^\s]+'))
+@Client.on_message(filters.private & filters.regex(r'https?://[^\s]+') & ~filters.create(lambda _, __, msg: msg.chat.id in user_queues))
 async def single_link(client: Client, message: Message):
     user_id = message.chat.id
     lol = await chk_user(message, user_id)
@@ -655,7 +655,7 @@ async def process_and_upload(client, userbot, sender, edit_id, msg, file, messag
 
     await client.delete_messages(sender, edit_id)
 
-@Client.on_message(filters.private & filters.text & ~filters.regex("^/"))
+@Client.on_message(filters.private & filters.text & ~filters.regex("^/") & ~filters.create(lambda _, __, msg: msg.chat.id in user_queues))
 async def save(client: Client, message: Message):
     try:
         logger.info(f"Received message from {message.from_user.id}: {message.text}")
