@@ -570,11 +570,11 @@ async def process_single_link(client, userbot, sender, edit_id, msg_link, messag
                     await client.delete_messages(sender, edit_id)
                     return
 
-                await client.edit_message_text(sender, edit_id, "Trying to Download...")
-                file = await userbot.download_media(msg, progress=progress, progress_args=[message, "down"])
+                await client.edit_message_text(sender, edit_id, "📥 Downloading...")
+                file = await userbot.download_media(msg)
 
                 # Process file and upload
-                await process_and_upload(client, userbot, sender, edit_id, msg, file, message)
+                await process_and_upload_simple(client, sender, edit_id, msg, file)
 
             else:
                 # No userbot - for private channels, tell user to login
@@ -586,15 +586,39 @@ async def process_single_link(client, userbot, sender, edit_id, msg_link, messag
                 await copy_message_public(client, sender, chat, msg_id, message)
                 await client.delete_messages(sender, edit_id)
 
-    else:
-        # Public channel - try direct copy first
-        await client.edit_message_text(sender, edit_id, "Cloning...")
-        try:
-            chat = msg_link.split("/")[-2]
-            await copy_message_public(client, sender, chat, msg_id, message)
-            await client.delete_messages(sender, edit_id)
-        except Exception as e:
-            await client.edit_message_text(sender, edit_id, f'Failed to save: `{msg_link}`\n\nError: {str(e)}')
+async def process_and_upload_simple(client, sender, edit_id, msg, file):
+    """Simple upload without progress to avoid stuck issues"""
+    try:
+        await client.edit_message_text(sender, edit_id, "📤 Uploading...")
+        
+        if msg.media == MessageMediaType.VIDEO:
+            await client.send_video(
+                chat_id=sender,
+                video=file,
+                caption=clean_caption(msg.caption)
+            )
+        elif msg.media == MessageMediaType.PHOTO:
+            await client.send_photo(sender, file, caption=clean_caption(msg.caption))
+        else:
+            await client.send_document(
+                chat_id=sender,
+                document=file,
+                caption=clean_caption(msg.caption)
+            )
+        
+        # Cleanup
+        if os.path.exists(file):
+            os.remove(file)
+        
+        await client.delete_messages(sender, edit_id)
+        
+    except Exception as e:
+        logger.error(f"Error in upload: {e}")
+        if os.path.exists(file):
+            try:
+                os.remove(file)
+            except:
+                pass
 
 async def copy_message_public(client, sender, chat_id, message_id, original_message):
     try:
@@ -1189,3 +1213,4 @@ async def button_callbacks(client: Client, callback_query):
 # Rexbots
 # Don't Remove Credit
 # Telegram Channel @RexBots_Official
+
