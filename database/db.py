@@ -109,7 +109,7 @@ class Database:
             self._save_db(db)
     
     # Premium Support
-    def add_premium(self, id, expiry_date):
+    async def add_premium(self, id, expiry_date):
         db = self._load_db()
         if str(id) in db:
             db[str(id)]["is_premium"] = True
@@ -117,7 +117,7 @@ class Database:
             self._save_db(db)
             logger.info(f"User {id} granted premium until {expiry_date}")
     
-    def remove_premium(self, id):
+    async def remove_premium(self, id):
         db = self._load_db()
         if str(id) in db:
             db[str(id)]["is_premium"] = False
@@ -125,14 +125,14 @@ class Database:
             self._save_db(db)
             logger.info(f"User {id} removed from premium")
     
-    def check_premium(self, id):
+    async def check_premium(self, id):
         db = self._load_db()
         user = db.get(str(id))
         if user and user.get("is_premium"):
             return user.get("premium_expiry")
         return None
     
-    def get_premium_users(self):
+    async def get_premium_users(self):
         db = self._load_db()
         for user in db.values():
             if user.get("is_premium"):
