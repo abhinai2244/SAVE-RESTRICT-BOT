@@ -569,6 +569,13 @@ async def send_cancel(client: Client, message: Message):
 @Client.on_message(filters.private & filters.text & ~filters.regex("^/"))
 async def handle_batch_response(client: Client, message: Message):
     chat_id = message.chat.id
+    
+    # First check if this is a batch conversation
+    if chat_id in batch_conversations:
+        # Let the batch conversation handler process this
+        return
+    
+    # Then check user queues
     if chat_id in user_queues:
         await user_queues[chat_id].put(message)
         return
