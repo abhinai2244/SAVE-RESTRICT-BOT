@@ -11,6 +11,8 @@ import time
 import shutil
 import re
 import pyrogram
+import platform
+import sys
 from pyrogram import Client, filters, enums
 from pyrogram.errors import (
     FloodWait, UserIsBlocked, InputUserDeactivated, UserAlreadyParticipant, 
@@ -358,22 +360,43 @@ async def send_start(client: Client, message: Message):
     ]
     reply_markup = InlineKeyboardMarkup(buttons)
 
-    await client.send_message(
-        chat_id=message.chat.id,
-        text=(
-            f"<blockquote><b>👋 Welcome {message.from_user.mention}!</b></blockquote>\n\n"
-            "<b>I am the Advanced Save Restricted Content Bot by RexBots.</b>\n\n"
-            "<blockquote><b>🚀 What I Can Do:</b>\n"
-            "<b>‣ Save Restricted Post (Text, Media, Files)</b>\n"
-            "<b>‣ Support Private & Public Channels</b>\n"
-            "<b>‣ Batch/Bulk Mode Supported</b></blockquote>\n\n"
-            f"<blockquote><b>🔐 Status:</b> {login_status}</blockquote>\n\n"
-            "<blockquote><b>⚠️ Note:</b> <i>You must <code>/login</code> to your account to use the downloading features.</i></blockquote>"
-        ),
-        reply_markup=reply_markup,
-        reply_to_message_id=message.id,
-        parse_mode=enums.ParseMode.HTML
-    )
+    try:
+        await client.send_message(
+            chat_id=message.chat.id,
+            text=(
+                f"<blockquote><b>👋 Welcome {message.from_user.mention}!</b></blockquote>\n\n"
+                "<b>I am the Advanced Save Restricted Content Bot by RexBots.</b>\n\n"
+                "<blockquote><b>🚀 What I Can Do:</b>\n"
+                "<b>‣ Save Restricted Post (Text, Media, Files)</b>\n"
+                "<b>‣ Support Private & Public Channels</b>\n"
+                "<b>‣ Batch/Bulk Mode Supported</b></blockquote>\n\n"
+                f"<blockquote><b>🔐 Status:</b> {login_status}</blockquote>\n\n"
+                "<blockquote><b>⚠️ Note:</b> <i>You must <code>/login</code> to your account to use the downloading features.</i></blockquote>"
+            ),
+            reply_markup=reply_markup,
+            reply_to_message_id=message.id,
+            parse_mode=enums.ParseMode.HTML
+        )
+    except FloodWait as e:
+        # Handle flood wait by sleeping for the required duration
+        await asyncio.sleep(e.value)
+        # Retry the message after the wait period
+        await client.send_message(
+            chat_id=message.chat.id,
+            text=(
+                f"<blockquote><b>👋 Welcome {message.from_user.mention}!</b></blockquote>\n\n"
+                "<b>I am the Advanced Save Restricted Content Bot by RexBots.</b>\n\n"
+                "<blockquote><b>🚀 What I Can Do:</b>\n"
+                "<b>‣ Save Restricted Post (Text, Media, Files)</b>\n"
+                "<b>‣ Support Private & Public Channels</b>\n"
+                "<b>‣ Batch/Bulk Mode Supported</b></blockquote>\n\n"
+                f"<blockquote><b>🔐 Status:</b> {login_status}</blockquote>\n\n"
+                "<blockquote><b>⚠️ Note:</b> <i>You must <code>/login</code> to your account to use the downloading features.</i></blockquote>"
+            ),
+            reply_markup=reply_markup,
+            reply_to_message_id=message.id,
+            parse_mode=enums.ParseMode.HTML
+        )
 
     # try:
     #     await message.react(
@@ -393,6 +416,83 @@ async def send_help(client: Client, message: Message):
         chat_id=message.chat.id,
         text=f"{HELP_TXT}"
     )
+
+# -------------------
+# Info command for diagnostics
+# -------------------
+
+@Client.on_message(filters.command(["info"]))
+async def send_info(client: Client, message: Message):
+    """Send diagnostic information about the bot"""
+    try:
+        # Get bot information
+        me = await client.get_me()
+        
+        # Get user information
+        user = message.from_user
+        
+        # Check login status
+        session = await db.get_session(user.id)
+        login_status = "✅ Logged In" if session else "❌ Not Logged In"
+        
+        # Check if user is admin
+        is_admin = user.id in ADMINS
+        
+        # Get system info
+        import platform
+        import sys
+        import psutil
+        
+        info_text = (
+            "<b>🤖 Bot Information</b>\n"
+            f"<b>• Name:</b> {me.first_name}\n"
+            f"<b>• Username:</b> @{me.username}\n"
+            f"<b>• ID:</b> {me.id}\n\n"
+            
+            "<b>👤 User Information</b>\n"
+            f"<b>• Name:</b> {user.first_name}\n"
+            f"<b>• Username:</b> @{user.username}\n"
+            f"<b>• ID:</b> {user.id}\n"
+            f"<b>• Is Admin:</b> {'✅ Yes' if is_admin else '❌ No'}\n\n"
+            
+            "<b>🔐 Login Status</b>\n"
+            f"<b>• Status:</b> {login_status}\n\n"
+            
+            "<b>💻 System Information</b>\n"
+            f"<b>• Platform:</b> {platform.system()} {platform.release()}\n"
+            f"<b>• Python:</b> {sys.version}\n"
+            f"<b>• Pyrogram:</b> {pyrogram.__version__}\n\n"
+            
+            "<b>⚠️ Troubleshooting</b>\n"
+            "If you're experiencing issues:\n"
+            "• Check if you're logged in (/login)\n"
+            "• Verify your session is valid\n"
+            "• Check if the bot has admin permissions in target channels\n"
+            "• Try restarting the bot if issues persist"
+        )
+        
+        await client.send_message(
+            chat_id=message.chat.id,
+            text=info_text,
+            parse_mode=enums.ParseMode.HTML
+        )
+        
+    except Exception as e:
+        # If there's an error, send a simpler message
+        error_info = (
+            "<b>❌ Error getting full diagnostic info</b>\n\n"
+            f"<b>Error:</b> {str(e)}\n\n"
+            "<b>Basic Info:</b>\n"
+            f"<b>• User:</b> {message.from_user.first_name}\n"
+            f"<b>• User ID:</b> {message.from_user.id}\n"
+            f"<b>• Command:</b> /info"
+        )
+        
+        await client.send_message(
+            chat_id=message.chat.id,
+            text=error_info,
+            parse_mode=enums.ParseMode.HTML
+        )
 
 # -------------------
 # Batch command handler
@@ -617,7 +717,13 @@ async def single_link(client: Client, message: Message):
     link = get_link(message.text)
 
     try:
-        msg = await message.reply("Processing...")
+        try:
+            msg = await message.reply("Processing...")
+        except FloodWait as e:
+            # Handle flood wait by sleeping for the required duration
+            await asyncio.sleep(e.value)
+            # Retry the message after the wait period
+            msg = await message.reply("Processing...")
 
         # Try to get user session if available
         user_data = await db.get_session(user_id)
@@ -802,7 +908,13 @@ async def save(client: Client, message: Message):
     try:
         logger.info(f"Received message from {message.from_user.id}: {message.text}")
         if "https://t.me/" in message.text:
-            await message.reply("🔄 **Processing your link...**", parse_mode=enums.ParseMode.HTML)
+            try:
+                await message.reply("🔄 **Processing your link...**", parse_mode=enums.ParseMode.HTML)
+            except FloodWait as e:
+                # Handle flood wait by sleeping for the required duration
+                await asyncio.sleep(e.value)
+                # Retry the message after the wait period
+                await message.reply("🔄 **Processing your link...**", parse_mode=enums.ParseMode.HTML)
         # Check if batch is already running
         if batch_temp.IS_BATCH.get(message.from_user.id) == False:
             return await message.reply_text(
@@ -947,6 +1059,21 @@ async def handle_private(client: Client, acc, message: Message, chatid: int, msg
         # Handle PeerIdInvalid (which might come as generic Exception or RPCError)
         # We try to refresh dialogs to learn about the peer.
         logger.warning(f"Error fetching message: {e}. Refreshing dialogs...")
+        
+        # Special error handling for channel -1003508871162
+        if chatid == -1003508871162:
+            await client.send_message(
+                message.chat.id,
+                f"❌ **Error accessing channel -1003508871162**\n\n"
+                f"**Error Details:** {str(e)}\n\n"
+                "**Possible Solutions:**\n"
+                "• Check if the channel exists\n"
+                "• Verify you have access to the channel\n"
+                "• Ensure your session is valid\n"
+                "• Try /login again if needed\n\n"
+                "The bot will continue processing other messages."
+            )
+        
         try:
             async for dialog in acc.get_dialogs(limit=None):
                 if dialog.chat.id == chatid:
@@ -959,6 +1086,19 @@ async def handle_private(client: Client, acc, message: Message, chatid: int, msg
             return False
         except Exception as e2:
             logger.error(f"Retry failed: {e2}")
+            
+            # Additional error reporting for the specific channel
+            if chatid == -1003508871162:
+                await client.send_message(
+                    message.chat.id,
+                    f"❌ **Persistent error with channel -1003508871162**\n\n"
+                    f"**Final Error:** {str(e2)}\n\n"
+                    "Please check:\n"
+                    "• Channel accessibility\n"
+                    "• Your permissions\n"
+                    "• Bot session validity"
+                )
+            
             return False
 
     if msg.empty:
@@ -1229,7 +1369,9 @@ async def button_callbacks(client: Client, callback_query):
                 disable_web_page_preview=True
             )
         except FloodWait as e:
+            # Handle flood wait by sleeping for the required duration
             await asyncio.sleep(e.value)
+            # Retry the message edit after the wait period
             await client.edit_message_text(
                 chat_id=message.chat.id,
                 message_id=message.id,
@@ -1274,7 +1416,9 @@ async def button_callbacks(client: Client, callback_query):
                 disable_web_page_preview=True
             )
         except FloodWait as e:
+            # Handle flood wait by sleeping for the required duration
             await asyncio.sleep(e.value)
+            # Retry the message edit after the wait period
             await client.edit_message_text(
                 chat_id=message.chat.id,
                 message_id=message.id,
@@ -1318,7 +1462,9 @@ async def button_callbacks(client: Client, callback_query):
                 parse_mode=enums.ParseMode.HTML
             )
         except FloodWait as e:
+            # Handle flood wait by sleeping for the required duration
             await asyncio.sleep(e.value)
+            # Retry the message edit after the wait period
             await client.edit_message_text(
                 chat_id=message.chat.id,
                 message_id=message.id,
@@ -1355,7 +1501,9 @@ async def button_callbacks(client: Client, callback_query):
                 disable_web_page_preview=True
             )
         except FloodWait as e:
+            # Handle flood wait by sleeping for the required duration
             await asyncio.sleep(e.value)
+            # Retry the message edit after the wait period
             await client.edit_message_text(
                 chat_id=message.chat.id,
                 message_id=message.id,
