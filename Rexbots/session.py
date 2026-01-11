@@ -10,7 +10,8 @@ from pyrogram.errors import (
     PhoneCodeInvalid,
     PhoneCodeExpired,
     SessionPasswordNeeded,
-    PasswordHashInvalid
+    PasswordHashInvalid,
+    FloodWait
 )
 from config import API_ID, API_HASH
 from database.db import db
@@ -88,6 +89,16 @@ async def login_handler(bot: Client, message: Message):
             await message.reply('**❌ __PHONE_NUMBER Is Invalid.__**')
             await temp_client.disconnect()
             del LOGIN_STATE[user_id]
+        except FloodWait as fw:
+            wait_time = min(fw.x, 300)  # Cap wait time at 5 minutes
+            await message.reply(f'**⏳ FloodWait detected! Please try again after {wait_time} seconds.**')
+            await temp_client.disconnect()
+            del LOGIN_STATE[user_id]
+        except FloodWait as fw:
+            wait_time = min(fw.x, 300)  # Cap wait time at 5 minutes
+            await message.reply(f'**⏳ FloodWait detected! Please try again after {wait_time} seconds.**')
+            await temp_client.disconnect()
+            del LOGIN_STATE[user_id]
         except Exception as e:
             await message.reply(f'**❌ __Error: {e}__**')
             await temp_client.disconnect()
@@ -141,6 +152,11 @@ async def finalize_login(bot, message, temp_client, user_id):
         del LOGIN_STATE[user_id]
         
         await message.reply("<b>__Account Login Successfully ✅\n\nIf You Get Any Error Related To AUTH KEY Then /logout first and /login again.__</b>")
+    except FloodWait as fw:
+        wait_time = min(fw.x, 300)  # Cap wait time at 5 minutes
+        await message.reply(f'<b>⏳ FloodWait detected during login finalization! Please try again after {wait_time} seconds.</b>')
+        if user_id in LOGIN_STATE:
+             del LOGIN_STATE[user_id]
     except Exception as e:
         await message.reply(f"<b>❌ __ERROR IN FINALIZING LOGIN: `{e}`__</b>")
         if user_id in LOGIN_STATE:
