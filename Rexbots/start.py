@@ -183,8 +183,8 @@ async def send_start(client: Client, message: Message):
              InlineKeyboardButton("⚙️ Settings", callback_data="settings_btn")
         ],
         [
-            InlineKeyboardButton('📢 Official Channel', url='https://t.me/RexBots_Official'),
-            InlineKeyboardButton('👨‍💻 Developer', url='https://t.me/about_zani/143')
+            InlineKeyboardButton('📢 Official Channel', url='https://t.me/ssc_cgl_pre_2026'),
+            InlineKeyboardButton('👨‍💻 Developer', url='https://t.me/lecturerequst_bot')
         ]
     ]
     reply_markup = InlineKeyboardMarkup(buttons)
