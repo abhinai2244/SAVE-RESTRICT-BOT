@@ -44,7 +44,7 @@ async def buy_premium(client: Client, message: Message):
         "**💲 Pricing:**\n"
         "• 1 Month: $5\n"
         "• 1 Year: $40\n\n"
-        "**Contact Admin to Buy:** @RexBots_Official"
+        "**Contact Admin to Buy:**@Hasjsgdkd_bot"
     )
     await message.reply_text(text)
 
