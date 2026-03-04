@@ -1,0 +1,59 @@
+{
+  "name": "SAVE-RESTRICT-BOT",
+  "description": "Telegram bot to save restricted content from private and public channels.",
+  "repository": "https://github.com/Suman9382/SAVE-RESTRICT-BOT",
+  "logo": "https://telegram.org/img/t_logo.png",
+  "keywords": [
+    "telegram",
+    "bot",
+    "pyrogram",
+    "restricted-content",
+    "mongodb"
+  ],
+  "stack": "heroku-22",
+  "buildpacks": [
+    {
+      "url": "heroku/python"
+    }
+  ],
+  "env": {
+    "BOT_TOKEN": {
+      "description": "Telegram Bot Token from BotFather",
+      "required": true
+    },
+    "API_ID": {
+      "description": "Telegram API ID from my.telegram.org",
+      "required": true
+    },
+    "API_HASH": {
+      "description": "Telegram API HASH from my.telegram.org",
+      "required": true
+    },
+    "ADMINS": {
+      "description": "Comma separated Telegram User IDs of bot admins",
+      "required": true
+    },
+    "DB_URI": {
+      "description": "MongoDB connection string (mongodb+srv://...)",
+      "required": true
+    },
+    "DB_NAME": {
+      "description": "MongoDB Database Name",
+      "value": "SaveRestrictedBot"
+    },
+    "LOG_CHANNEL": {
+      "description": "Channel ID for logging (Example: -100xxxxxxxxxx)",
+      "required": false
+    },
+    "FORCE_SUB_CHANNEL": {
+      "description": "Channel username without @ for force subscribe (optional)",
+      "required": false
+    }
+  },
+  "formation": {
+    "worker": {
+      "quantity": 1,
+      "size": "basic"
+    }
+  }
+}
